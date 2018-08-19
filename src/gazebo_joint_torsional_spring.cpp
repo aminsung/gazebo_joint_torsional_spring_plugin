@@ -1,34 +1,52 @@
 #include <gazebo/gazebo.hh>
 #include <gazebo/physics/physics.hh>
+// #include "gazebo/common/Assert.hh"
+// #include <gazebo/common/Event.hh>
+#include <gazebo/common/common.hh>
+// #include <gazebo/common/Plugin.hh>
 
-#include <ros/ros.h>
+// #include <ros/ros.h>
 
 namespace gazebo
 {
 	class TorsionalSpringPlugin : public ModelPlugin
 	{
-		public: TorsionalSpringPlugin() {
-			ROS_INFO("Loaded gazebo_joint_torsional_spring.");
-		}
+		public: TorsionalSpringPlugin() {}
 
-		// Pointer to model
-		private: physics::ModelPtr model;
+		
+		private:
+			// Pointer to model
+			physics::ModelPtr model;
+			// Pointer to SDF model
+			sdf::ElementPtr sdf;
+			// Pointer to joint
+			
+			physics::JointPtr joint;
+			// Set point
+			double setPoint;
+			// Spring constant
+			double kx;
+			// Pointer to update event connection
+			event::ConnectionPtr updateConnection;
+			
+			// Node handle
+			// std::unique_ptr<ros::NodeHandle> rosNode;
 
-		// Pointer to joint
-		private: physics::JointPtr joint;
 
-		// Spring constant
-		private: double setPoint;
-
-		// Rest angle
-		private: double kx;
-
-		// Pointer to update event connection
-		private: event::ConnectionPtr updateConnection;
 
 		// Load is called by Gazebo when the plugin is inserted into simulation
-		public: virtual void Load(physics::ModelPtr _model, sdf::ElementPtr _sdf)
+		public: void Load(physics::ModelPtr _model, sdf::ElementPtr _sdf)
 		{
+			// if (!ros::isInitialized())
+			// {
+			// 	int argc = 0;
+   //              char **argv = NULL;
+   //              ros::init(argc, argv, "spring_joint", ros::init_options::NoSigintHandler);
+			// }
+		// 	GZ_ASSERT(_model != NULL, "Received NULL model pointer for JointTorsionalSping Plugin!")
+
+		// 	GZ_ASSERT(_sdf != NULL, "Received NULL SDF pointer for JointTorsionalSping Plugin!")
+
 			// Safety check
 			if (_model->GetJointCount() == 0)
 			{
@@ -36,38 +54,49 @@ namespace gazebo
 				return;
 			}
 
+			// this->rosNode.reset(new ros::NodeHandle("spring_joint"));
+
 			// Store model pointer
 			this->model = _model;
 
+			// Store the SDF pointer
+			this->sdf = _sdf;
+
 			if (_sdf->HasElement("joint"))
-			{
 				this->joint = _model->GetJoint(_sdf->Get<std::string>("joint"));
-			}
+			else
+				std::cout << "Must specify joint to apply a torsional spring at!\n";
 
-			if (_sdf->HasElement("k"))
-				this->kx = _sdf->Get<double>("k");
+			this->kx = 0.0;
+			if (_sdf->HasElement("kx"))
+				this->kx = _sdf->Get<double>("kx");
+			else
+				printf("Torsional spring coefficient not specified! Defaulting to: %f\n", this->kx);
 
+			this->setPoint = 0.0;
 			if (_sdf->HasElement("set_point"))
 				this->setPoint = _sdf->Get<double>("set_point");
+			else
+				printf("Set point not specified! Defaulting to: %f\n", this->setPoint);
 
-			// // Store the joints you want to have a torsional spring applied
-			// this->joint = _model->GetJoint("LEFT_KNEE");
+			std::cout << "Loaded gazebo_joint_torsional_spring.\n";
 
+		}
+
+		
+		public: void Init()
+		{
 			// Listen to update event
 			this->updateConnection = event::Events::ConnectWorldUpdateBegin(
 				std::bind (&TorsionalSpringPlugin::OnUpdate, this) );
 		}
 
-		;
-
-		public: void OnUpdate()
+		protected: void OnUpdate()
 		{
-			// this->setPoint = 0;
-			// this->kx = 0.000139;
-
 			double current_angle = this->joint->GetAngle(0).Radian();
-			this->joint->SetForce(0, this->kx*(this->setPoint-current_angle));
+			this->joint->SetForce(0, this->kx*(this->setPoint-current_angle));			
 		}
+		
 	};
 
 	// Register the plugin such that Gazebo can call Load on this plugin
